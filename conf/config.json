@@ -1,0 +1,17 @@
+{
+    "Path": [
+        {
+            "PathName": "Name1",
+            "PathType": "LocalFile",
+            "PathLoc": "/home/cc",
+            "PathExtend": "AccessToken=xx&&Uin=xx"
+        }
+    ],
+    "Sync": [
+        {
+            "From": "Name1",
+            "To": "Name2",
+            "Secret": "123"
+        }
+    ]
+}
