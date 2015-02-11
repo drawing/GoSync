@@ -13,7 +13,7 @@ type DescMeta struct {
 
 type DescNode struct {
 	UpdateTime time.Time
-	Md5        string
+	Md5        []byte
 	IsDir      bool
 	Children   []DescNode
 }
