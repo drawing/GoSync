@@ -3,27 +3,44 @@ package sync
 import (
 	"bytes"
 	"errors"
+	"io"
 )
 
 type Sync struct {
 }
 
-func (s *Sync) Sync(from, to *DescNode, fromfs, tofs FS) error {
+func (s *Sync) Sync(root string, from, to *DescNode, ffs, tfs FS) error {
 	// file
-	if !from.IsDir {
-		if to != nil && bytes.Compare(from.Md5, to.Md5) == 0 {
-			// to is newest file
-			return nil
-		}
-		// to is not the newest file, upload
-		return nil
+	fmeta, err := ffs.
+	// directory
+	files, err := ffile.ReadDir()
+	if err != nil {
+		return err
 	}
 
-	// dir
-	for _, v := range from.DescNode {
-		if v.UpdateTime != xx.UpdateTime {
-			// need upload
+	// upload diff file
+	for _, v := range files {
+		// no change
+		vdesc, present := from.DescNode[v.Name()]
+		if present && v.UpdateTime() == vdesc.UpdateTime {
+			continue
 		}
+
+		node := DescNode{name: v.Name(), UpdateTime: v.UpdateTime(), IsDir: v.IsDir()}
+
+		// is directory
+		if v.IsDir() {
+			s.Sync(root+"/"+v.Name(), node, to, ffs, tfs)
+			from.DescNode[v.Name()] = node
+			continue
+		}
+
+		// need upload file
+		_, err := io.Copy(tfile, ffile)
+		if err != nil {
+			return err
+		}
+		from.DescNode[v.Name()] = node
 	}
 }
 
