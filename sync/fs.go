@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+var DefaultFactory FSFactory
+
 type FSFactory struct {
 	mpfs map[string]FS
 }
@@ -27,6 +29,7 @@ func (factory *FSFactory) GetFS(name string) FS {
 
 type FS interface {
 	Create(name string) (file File, err error)
+	Open(name string) (file File, err error)
 	Remove(name string) error
 	Mkdir(name string) error
 	Stat(name string) (FileMeta, error)
