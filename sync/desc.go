@@ -16,5 +16,5 @@ type DescNode struct {
 	UpdateTime time.Time
 	Md5        []byte
 	IsDir      bool
-	Children   []DescNode
+	Children   map[string]DescNode
 }
