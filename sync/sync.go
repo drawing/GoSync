@@ -1,16 +1,11 @@
 package sync
 
 import (
-	"bytes"
 	"errors"
 	"io"
 )
 
 type Sync struct {
-	fromRoot string
-	toRoot   string
-	fromFs   FS
-	toFs     FS
 }
 
 func (s *Sync) doSyncDesc(desc *DescMeta) error {
@@ -19,7 +14,6 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 		return errors.New("desc fs is nil")
 	}
 
-	// directory
 	meta, err := fs.Stat(desc.Root)
 	if err != nil {
 		return err
@@ -47,20 +41,16 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 
 	var files []FileMeta
 
-	if meta.IsDir() {
-		dir, err := s.fromFs.Open(desc.Root)
-		if err != nil {
-			return nil
-		}
-		files, err = dir.ReadDir()
-		if err != nil {
-			return err
-		}
-
-		dir.Close()
-	} else {
-		files = append(files, file)
+	dir, err := fs.Open(desc.Root)
+	if err != nil {
+		return nil
 	}
+	files, err = dir.ReadDir()
+	if err != nil {
+		return err
+	}
+
+	dir.Close()
 
 	for _, v := range files {
 		// no change
@@ -75,22 +65,13 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 		if v.IsDir() {
 			tmpMeta := &DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver}
 			s.doSyncDesc(tmpMeta)
-			node.Children = tmpMeta.Tree
+			node.Children = tmpMeta.Tree.Children
 		}
 
 		root.Children[v.Name()] = node
 	}
 
 	desc.Tree = root
-}
-
-func (s *Sync) uploadFile(path string, from, to *DescNode, ffs, tfs FS) error {
-	// file
-	node := DescNode{name: fmeta.Name(), UpdateTime: v.fmeta(), IsDir: v.IsDir()}
-	_, err := io.Copy(tfile, ffile)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -122,7 +103,12 @@ func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 
 	if !from.Tree.IsDir {
 		// upload
-		tfile, err := s.toFs.Create(s.toRoot + path + "/" + v.Name())
+		tfile, err := tofs.Create(to.Root + "/" + node.Name)
+		if err != nil {
+			return err
+		}
+
+		ffile, err := fromfs.Create(from.Root + "/" + node.Name)
 		if err != nil {
 			return err
 		}
@@ -142,16 +128,16 @@ func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 	// upload diff file
 	for _, v := range from.Tree.Children {
 		// no change
-		vdesc, present := to.Tree.Children[v.Name()]
-		if present && v.UpdateTime() == vdesc.UpdateTime {
+		desc, present := to.Tree.Children[v.Name]
+		if present && v.UpdateTime == desc.UpdateTime {
 			continue
 		}
 
-		tmpFromMeta := &DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver, Tree: v}
-		tmpToMeta := &DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver, Tree: vdesc}
-		doSyncFromTo(tmpFromMeta, tmpToMeta)
+		tmpFromMeta := &DescMeta{Name: v.Name, Root: from.Root + "/" + v.Name, Driver: from.Driver, Tree: v}
+		tmpToMeta := &DescMeta{Name: desc.Name, Root: to.Root + "/" + v.Name, Driver: to.Driver, Tree: desc}
+		s.doSyncFromTo(tmpFromMeta, tmpToMeta)
 
-		to.DescNode[v.Name()] = tmpToMeta.Tree
+		node.Children[v.Name] = tmpToMeta.Tree
 	}
 
 	to.Tree = node
@@ -159,21 +145,14 @@ func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 }
 
 func (s *Sync) LightSync(from *DescMeta, to *DescMeta) error {
-	fromfs := DefaultFactory.GetFS(from.Driver)
-	if fromfs == nil {
-		return errors.New("from fs is nil")
-	}
-	tofs := DefaultFactory.GetFS(to.Driver)
-	if tofs == nil {
-		return errors.New("to fs is nil")
-	}
+	var err error = nil
 
-	err := doSyncDesc(from)
+	err = s.doSyncDesc(from)
 	if err != nil {
 		return err
 	}
 
-	err := doSyncFromTo(from, to)
+	err = s.doSyncFromTo(from, to)
 	if err != nil {
 		return err
 	}

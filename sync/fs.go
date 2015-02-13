@@ -15,7 +15,7 @@ func (factory *FSFactory) Register(name string, fs FS) {
 		factory.mpfs = make(map[string]FS)
 	}
 
-	factory[name] = fs
+	factory.mpfs[name] = fs
 }
 
 func (factory *FSFactory) GetFS(name string) FS {
@@ -23,7 +23,7 @@ func (factory *FSFactory) GetFS(name string) FS {
 		return nil
 	}
 
-	fs, _ = factory.mpfs[name]
+	fs, _ := factory.mpfs[name]
 	return fs
 }
 
