@@ -25,6 +25,26 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 		return err
 	}
 
+	var root *DescNode
+
+	if desc.Tree != nil {
+		if desc.Tree.UpdateTime == meta.UpdateTime() {
+			return nil
+		}
+		root = desc.Tree
+	} else {
+		root = &DescNode{Name: meta.Name(), UpdateTime: meta.UpdateTime(), IsDir: meta.IsDir()}
+	}
+
+	if !meta.IsDir() {
+		desc.Tree = root
+		return nil
+	}
+
+	if root.Children == nil {
+		root.Children = make(map[string]*DescNode)
+	}
+
 	var files []FileMeta
 
 	if meta.IsDir() {
@@ -44,22 +64,24 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 
 	for _, v := range files {
 		// no change
-		vdesc, present := desc.DescNode[v.Name()]
+		vdesc, present := root.Children[v.Name()]
 		if present && v.UpdateTime() == vdesc.UpdateTime {
 			continue
 		}
 
-		node := DescNode{Name: v.Name(), UpdateTime: v.UpdateTime(), IsDir: v.IsDir()}
+		node := &DescNode{Name: v.Name(), UpdateTime: v.UpdateTime(), IsDir: v.IsDir()}
 
 		// is directory
 		if v.IsDir() {
-			tmpMeta := DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver}
+			tmpMeta := &DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver}
 			s.doSyncDesc(tmpMeta)
 			node.Children = tmpMeta.Tree
 		}
 
-		desc.DescNode[v.Name()] = node
+		root.Children[v.Name()] = node
 	}
+
+	desc.Tree = root
 }
 
 func (s *Sync) SyncFile(path string, from, to *DescNode, ffs, tfs FS) error {
@@ -72,7 +94,7 @@ func (s *Sync) SyncFile(path string, from, to *DescNode, ffs, tfs FS) error {
 	return nil
 }
 
-func (s *Sync) SyncDir(path string, from, to *DescNode) error {
+func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 	// directory
 	ffile, err := s.fromFs.Open(s.fromRoot + path)
 	if err != nil {
@@ -131,13 +153,12 @@ func (s *Sync) LightSync(from *DescMeta, to *DescMeta) error {
 		return errors.New("to fs is nil")
 	}
 
-	s.fromRoot = from.Root
-	s.toRoot = to.Root
+	err := doSyncFromTo(from, to)
+	if err != nil {
+		return err
+	}
 
-	s.fromFs = fromfs
-	s.toFs = tofs
-
-	return s.Sync("", from.Tree, to.Tree)
+	return nil
 }
 
 func (s *Sync) CompleteSync(from *DescMeta, to *DescMeta) {
