@@ -84,7 +84,7 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 	desc.Tree = root
 }
 
-func (s *Sync) SyncFile(path string, from, to *DescNode, ffs, tfs FS) error {
+func (s *Sync) uploadFile(path string, from, to *DescNode, ffs, tfs FS) error {
 	// file
 	node := DescNode{name: fmeta.Name(), UpdateTime: v.fmeta(), IsDir: v.IsDir()}
 	_, err := io.Copy(tfile, ffile)
@@ -95,35 +95,33 @@ func (s *Sync) SyncFile(path string, from, to *DescNode, ffs, tfs FS) error {
 }
 
 func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
-	// directory
-	ffile, err := s.fromFs.Open(s.fromRoot + path)
-	if err != nil {
+	fromfs := DefaultFactory.GetFS(from.Driver)
+	if fromfs == nil {
+		return errors.New("from fs is nil")
+	}
+	tofs := DefaultFactory.GetFS(to.Driver)
+	if tofs == nil {
+		return errors.New("to fs is nil")
+	}
+
+	if from.Tree == nil {
 		return nil
 	}
 
-	files, err := ffile.ReadDir()
-	if err != nil {
-		return err
+	node := &DescNode{
+		Name:       from.Tree.Name,
+		UpdateTime: from.Tree.UpdateTime,
+		IsDir:      from.Tree.IsDir}
+
+	if to.Tree != nil {
+		if from.Tree.UpdateTime == to.Tree.UpdateTime {
+			return nil
+		}
+		node.Children = to.Tree.Children
 	}
 
-	// upload diff file
-	for _, v := range files {
-		// no change
-		vdesc, present := from.DescNode[v.Name()]
-		if present && v.UpdateTime() == vdesc.UpdateTime {
-			continue
-		}
-
-		node := DescNode{name: v.Name(), UpdateTime: v.UpdateTime(), IsDir: v.IsDir()}
-
-		// is directory
-		if v.IsDir() {
-			s.SyncDir(path+"/"+v.Name(), node, to)
-			from.DescNode[v.Name()] = node
-			continue
-		}
-
-		// need upload file
+	if !from.Tree.IsDir {
+		// upload
 		tfile, err := s.toFs.Create(s.toRoot + path + "/" + v.Name())
 		if err != nil {
 			return err
@@ -139,8 +137,25 @@ func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 			return err
 		}
 
-		from.DescNode[v.Name()] = node
 	}
+
+	// upload diff file
+	for _, v := range from.Tree.Children {
+		// no change
+		vdesc, present := to.Tree.Children[v.Name()]
+		if present && v.UpdateTime() == vdesc.UpdateTime {
+			continue
+		}
+
+		tmpFromMeta := &DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver, Tree: v}
+		tmpToMeta := &DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver, Tree: vdesc}
+		doSyncFromTo(tmpFromMeta, tmpToMeta)
+
+		to.DescNode[v.Name()] = tmpToMeta.Tree
+	}
+
+	to.Tree = node
+	return nil
 }
 
 func (s *Sync) LightSync(from *DescMeta, to *DescMeta) error {
@@ -151,6 +166,11 @@ func (s *Sync) LightSync(from *DescMeta, to *DescMeta) error {
 	tofs := DefaultFactory.GetFS(to.Driver)
 	if tofs == nil {
 		return errors.New("to fs is nil")
+	}
+
+	err := doSyncDesc(from)
+	if err != nil {
+		return err
 	}
 
 	err := doSyncFromTo(from, to)
