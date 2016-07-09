@@ -1,17 +1,17 @@
-{
-    "Path": [
-        {
-            "PathName": "Name1",
-            "PathType": "LocalFile",
-            "PathLoc": "/home/cc",
-            "PathExtend": "AccessToken=xx&&Uin=xx"
-        }
-    ],
-    "Sync": [
-        {
-            "From": "Name1",
-            "To": "Name2",
-            "Secret": "123"
-        }
-    ]
-}
+[
+    {
+        "From": {
+            "Name": "name1",
+            "Root": "/home/cc",
+            "Driver": "local",
+            "Storage": "./config/name1.data"
+        },
+        "To": {
+            "Name": "name2",
+            "Root": "/home/dd",
+            "Driver": "local",
+            "Storage": "./config/name2.data"
+        },
+        "Interval": 3600
+    }
+]

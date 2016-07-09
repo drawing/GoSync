@@ -1,37 +1,45 @@
 package main
 
 import (
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"time"
+
 	"./sync"
 )
 
-type Sync struct {
-	From string
-	To   string
-}
-
-type Path struct {
-	PathName   string
-	PathType   string
-	PathLoc    string
-	PathExtend string
+type SyncConfig struct {
+	From     *sync.Outline
+	To       *sync.Outline
+	Interval int
 }
 
 type Config struct {
-	LightInterval  uint64
-	DiskInterval   uint64
-	EntireInterval uint64
-
-	Sources []string
-
-	SyncItem []Sync
+	Sync []SyncConfig
 }
 
-type Storage struct {
+func doSync(interval int, from *sync.Outline, to *sync.Outline) {
+	for {
+		sync.LightSync(from, to)
+		time.Sleep(time.Second * time.Duration(interval))
+	}
 }
 
 func main() {
-	var from *sync.DescMeta
-	var to *sync.DescMeta
-	var sc sync.Sync
-	sc.LightSync(from, to)
+	config := Config{}
+	confdata, err := ioutil.ReadFile(".config/json.conf")
+	if err != nil {
+		log.Fatalln("read config failed:", err)
+	}
+
+	err = json.Unmarshal(confdata, &config)
+	if err != nil {
+		log.Fatalln("Unmarshal config failed:", err)
+	}
+	for _, v := range config.Sync {
+		go doSync(v.Interval, v.From, v.To)
+	}
+
+	time.Sleep(time.Second * 1000)
 }

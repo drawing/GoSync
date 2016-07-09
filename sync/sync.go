@@ -8,7 +8,7 @@ import (
 type Sync struct {
 }
 
-func (s *Sync) doSyncDesc(desc *DescMeta) error {
+func (s *Sync) updateOutline(desc *Outline) error {
 	fs := DefaultFactory.GetFS(desc.Driver)
 	if fs == nil {
 		return errors.New("desc fs is nil")
@@ -19,7 +19,7 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 		return err
 	}
 
-	var root *DescNode
+	var root *Node
 
 	if desc.Tree != nil {
 		if desc.Tree.UpdateTime == meta.UpdateTime() {
@@ -27,7 +27,7 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 		}
 		root = desc.Tree
 	} else {
-		root = &DescNode{Name: meta.Name(), UpdateTime: meta.UpdateTime(), IsDir: meta.IsDir()}
+		root = &Node{Name: meta.Name(), UpdateTime: meta.UpdateTime(), IsDir: meta.IsDir()}
 	}
 
 	if !meta.IsDir() {
@@ -36,7 +36,7 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 	}
 
 	if root.Children == nil {
-		root.Children = make(map[string]*DescNode)
+		root.Children = make(map[string]*Node)
 	}
 
 	var files []FileMeta
@@ -59,12 +59,12 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 			continue
 		}
 
-		node := &DescNode{Name: v.Name(), UpdateTime: v.UpdateTime(), IsDir: v.IsDir()}
+		node := &Node{Name: v.Name(), UpdateTime: v.UpdateTime(), IsDir: v.IsDir()}
 
 		// is directory
 		if v.IsDir() {
-			tmpMeta := &DescMeta{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver}
-			s.doSyncDesc(tmpMeta)
+			tmpMeta := &Outline{Name: desc.Name, Root: desc.Root + "/" + v.Name(), Driver: desc.Driver}
+			s.updateOutline(tmpMeta)
 			node.Children = tmpMeta.Tree.Children
 		}
 
@@ -75,7 +75,7 @@ func (s *Sync) doSyncDesc(desc *DescMeta) error {
 	return nil
 }
 
-func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
+func (s *Sync) doSyncFromTo(from, to *Outline) error {
 	fromfs := DefaultFactory.GetFS(from.Driver)
 	if fromfs == nil {
 		return errors.New("from fs is nil")
@@ -89,7 +89,7 @@ func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 		return nil
 	}
 
-	node := &DescNode{
+	node := &Node{
 		Name:       from.Tree.Name,
 		UpdateTime: from.Tree.UpdateTime,
 		IsDir:      from.Tree.IsDir}
@@ -133,8 +133,8 @@ func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 			continue
 		}
 
-		tmpFromMeta := &DescMeta{Name: v.Name, Root: from.Root + "/" + v.Name, Driver: from.Driver, Tree: v}
-		tmpToMeta := &DescMeta{Name: desc.Name, Root: to.Root + "/" + v.Name, Driver: to.Driver, Tree: desc}
+		tmpFromMeta := &Outline{Name: v.Name, Root: from.Root + "/" + v.Name, Driver: from.Driver, Tree: v}
+		tmpToMeta := &Outline{Name: desc.Name, Root: to.Root + "/" + v.Name, Driver: to.Driver, Tree: desc}
 		s.doSyncFromTo(tmpFromMeta, tmpToMeta)
 
 		node.Children[v.Name] = tmpToMeta.Tree
@@ -144,10 +144,20 @@ func (s *Sync) doSyncFromTo(from, to *DescMeta) error {
 	return nil
 }
 
-func (s *Sync) LightSync(from *DescMeta, to *DescMeta) error {
+func LightSync(from *Outline, to *Outline) error {
+	var s Sync
+
 	var err error = nil
 
-	err = s.doSyncDesc(from)
+	from.LoadTree()
+	to.LoadTree()
+
+	err = s.updateOutline(from)
+	if err != nil {
+		return err
+	}
+
+	err = s.updateOutline(to)
 	if err != nil {
 		return err
 	}
@@ -157,8 +167,8 @@ func (s *Sync) LightSync(from *DescMeta, to *DescMeta) error {
 		return err
 	}
 
-	return nil
-}
+	from.SaveTree()
+	to.SaveTree()
 
-func (s *Sync) CompleteSync(from *DescMeta, to *DescMeta) {
+	return nil
 }
